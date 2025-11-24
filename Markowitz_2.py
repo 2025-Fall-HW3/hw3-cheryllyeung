@@ -51,7 +51,7 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=118, gamma=0.88):
+    def __init__(self, price, exclude, lookback=120, gamma=0.75):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
@@ -89,7 +89,7 @@ class MyPortfolio:
                     env.start()
                     with gp.Model(env=env, name="portfolio") as model:
                         # Decision variables
-                        w = model.addMVar(n, name="w", lb=0, ub=0.5)
+                        w = model.addMVar(n, name="w", lb=0, ub=0.42)
 
                         # Budget constraint
                         model.addConstr(w.sum() == 1, name="budget")
