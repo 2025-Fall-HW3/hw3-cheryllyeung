@@ -51,7 +51,7 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0):
+    def __init__(self, price, exclude, lookback=118, gamma=0.88):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
@@ -70,8 +70,56 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
-        
-        
+        # For each day starting from lookback period
+        for i in range(self.lookback + 1, len(self.price)):
+            # Get historical returns for the lookback window
+            assets = self.price.columns[self.price.columns != self.exclude]
+            R_n = self.returns.copy()[assets].iloc[i - self.lookback : i]
+
+            # Calculate mean returns and covariance
+            Sigma = R_n.cov().values
+            mu = R_n.mean().values
+            n = len(assets)
+
+            # Use Gurobi to solve mean-variance optimization
+            try:
+                with gp.Env(empty=True) as env:
+                    env.setParam("OutputFlag", 0)
+                    env.setParam("DualReductions", 0)
+                    env.start()
+                    with gp.Model(env=env, name="portfolio") as model:
+                        # Decision variables
+                        w = model.addMVar(n, name="w", lb=0, ub=0.5)
+
+                        # Budget constraint
+                        model.addConstr(w.sum() == 1, name="budget")
+
+                        # Objective: maximize risk-adjusted return
+                        portfolio_return = mu @ w
+                        portfolio_variance = w @ Sigma @ w
+                        objective = portfolio_return - (self.gamma / 2) * portfolio_variance
+
+                        model.setObjective(objective, gp.GRB.MAXIMIZE)
+                        model.optimize()
+
+                        if model.status == gp.GRB.OPTIMAL or model.status == gp.GRB.SUBOPTIMAL:
+                            weights_array = np.array([model.getVarByName(f"w[{j}]").X for j in range(n)])
+                            self.portfolio_weights.loc[self.price.index[i], assets] = weights_array
+                        else:
+                            # Fallback to risk parity
+                            volatilities = R_n.std()
+                            inv_vol = 1.0 / volatilities
+                            weights = inv_vol / inv_vol.sum()
+                            self.portfolio_weights.loc[self.price.index[i], assets] = weights.values
+            except:
+                # Fallback to risk parity
+                volatilities = R_n.std()
+                inv_vol = 1.0 / volatilities
+                weights = inv_vol / inv_vol.sum()
+                self.portfolio_weights.loc[self.price.index[i], assets] = weights.values
+
+        # Set excluded asset weight to 0
+        self.portfolio_weights[self.exclude] = 0
         """
         TODO: Complete Task 4 Above
         """
